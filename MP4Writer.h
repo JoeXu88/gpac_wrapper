@@ -33,6 +33,22 @@ typedef enum tag_AF_NALU_TYPE
 	AF_NALU_MAX
 }AF_NALU_TYPE;
 
+typedef struct _videoparam
+{
+	int width;
+	int height;
+	int fps;
+}ParamVideo;
+
+typedef struct _audioparam
+{
+	int samplerate;
+	int channel;
+	int bit_depth;
+	int profile;
+}ParamAudio;
+
+
 
 class MP4Writer
 {
@@ -40,27 +56,35 @@ public:
 	MP4Writer();
 	virtual ~MP4Writer();
 
-	int Create(char *strName, MP4_ENC_TYPE nEncType, int nWidth, int nHeight, int nFps = 25);
-	int Save();
+	int Create(char *strName);
+	void AddVideoTrack(MP4_ENC_TYPE nEncType, int nWidth, int nHeight, int nFps = 25);
+	void AddAudioTrack(MP4_ENC_TYPE nEncType, int samplerate, int channel, int bit_depth, int profile = GF_M4A_AAC_LC);
 	int WriteVideo(unsigned char *pData, int nSize, uint64_t nTimeStamp);
-	int WriteAudio(unsigned char *pData, int nSize, uint64_t nTimeStamp){ /*TODO*/ }
+	int WriteAudio(unsigned char *pData, int nSize, uint64_t nTimeStamp);
+	int Save();
 
 private:
 	int WriteH264MetaData(unsigned char **ppNaluData, int *pNaluLength);
 	int WriteH265MetaData(unsigned char **ppNaluData, int *pNaluLength);
 
-	int WriteFrame(unsigned char *pData, int nSize, bool bKey, uint64_t nTimeStamp);
+	int WriteVFrame(unsigned char *pData, int nSize, bool bKey, uint64_t nTimeStamp);
+	int WriteAFrame(unsigned char *pData, int nSize, uint64_t nTimeStamp);
 
 	int WriteH264(unsigned char *pData, int nSize, uint64_t nTimeStamp);
 	int WriteH265(unsigned char *pData, int nSize, uint64_t nTimeStamp);
+	int WriteAAC(unsigned char *pData, int nSize, uint64_t nTimeStamp);
 
 	int NewVideoTrack();
+	int NewAudioTrack();
+
+private:
+	int ConfigAudioTrack();
+	int ConfigAAC();
 
 private:
 	MP4_ENC_TYPE m_enEncType;
-	int m_nWidth;
-	int m_nHeight;
-	int m_nFps;
+	ParamVideo m_vParam;
+	ParamAudio m_aParam;
 	
 	uint64_t m_VTimeStamp;
 	uint64_t m_ATimeStamp;
@@ -72,7 +96,8 @@ private:
 
 	int m_VnTrackID; //video new track id
 	int m_AnTrackID; //audio new track id
-	unsigned int m_nStreamIndex;
+	unsigned int m_VnStreamIndex;
+	unsigned int m_AnStreamIndex;
 	
 	unsigned char *m_pNaluData[AF_NALU_MAX];
 	int m_pNaluLength[AF_NALU_MAX];

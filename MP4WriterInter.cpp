@@ -22,7 +22,10 @@ int MP4WriterExit(AFMP4Handle hMP4File)
 int MP4WriterCreateFile(AFMP4Handle hMP4File, char *strName, MP4_ENC_TYPE nEncType, int nWidth, int nHeight, int nFps)
 {
 	MP4Writer *pCMP4Writer = (MP4Writer *)hMP4File;
-	return pCMP4Writer->Create(strName, nEncType, nWidth, nHeight, nFps);
+	int ret = pCMP4Writer->Create(strName);
+	if(!ret) pCMP4Writer->AddVideoTrack(nEncType, nWidth, nHeight, nFps);
+
+	return ret;
 }
 
 int MP4WriterSaveFile(AFMP4Handle hMP4File)

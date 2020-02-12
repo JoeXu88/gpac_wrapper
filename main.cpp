@@ -16,10 +16,14 @@
 const uint32_t MAX_BUF_SIZE = 500000;
 
 
-#define FILE_PREFIX "/root/windev/thirdparty/test_files/"
-static char* IN_SIZE_FILE_NAME = FILE_PREFIX"stream2_h265_size.txt"; //"/root/windev/thirdparty/test_files/stream2_h265_size.txt";
+#define FILE_PREFIX "./test_files/"
+// #define FILE_PREFIX "/root/windev/thirdparty/test_files/"
+static char* IN_SIZE_FILE_NAME = FILE_PREFIX"stream2_h265_size.txt";
 static char* IN_DATA_FILE_NAME_265 = FILE_PREFIX"stream2.h265";
 static char* IN_DATA_FILE_NAME_264 = FILE_PREFIX"stream1.h264";
+static char* AIN_SIZE_FILE_NAME = FILE_PREFIX"audio_aac_pktsize_16k_pkt.txt";
+static char* IN_DATA_FILE_NAME_AAC = FILE_PREFIX"audio-h265_16k.aac";
+
 static char* OUT_FILE_NAME_265 = FILE_PREFIX"gpac_265_test.mp4";
 static char* OUT_FILE_NAME_264 = FILE_PREFIX"gpac_264_test.mp4";
 
@@ -121,6 +125,108 @@ int test_h265()
     MP4WriterSaveFile(mp4hdl);
     MP4WriterExit(mp4hdl);
 #endif
+    return 0;
+}
+
+int test_file()
+{
+    uint8_t *buf = new uint8_t[MAX_BUF_SIZE];
+
+    MP4Writer writer;
+    if(writer.Create(OUT_FILE_NAME_265))
+    {
+        printf("cant not create mp4 file:%s\n", OUT_FILE_NAME_265);
+        return -1;
+    }
+
+    writer.AddVideoTrack(AF_MP4_VIDEO_H265, 0, 0);
+    writer.AddAudioTrack(AF_MP4_AUDIO_AAC, 16000, 1, 16);
+
+    FILE* vsizein_file = fopen(IN_SIZE_FILE_NAME, "rb");
+    if(vsizein_file == 0)
+    {
+        printf("can not open size file for reading\n");
+        return -1;
+    }
+
+    FILE* asizein_file = fopen(AIN_SIZE_FILE_NAME, "rb");
+    if(asizein_file == 0)
+    {
+        printf("can not open audio size file for reading\n");
+        return -1;
+    }
+
+    FILE* vinfile = fopen(IN_DATA_FILE_NAME_265, "rb");
+    if(vinfile == 0)
+    {
+        printf("can not open 265 file for reading\n");
+        return -1;
+    }
+
+    FILE* ainfile = fopen(IN_DATA_FILE_NAME_AAC, "rb");
+    if(ainfile == 0)
+    {
+        printf("can not open aac data file for reading\n");
+        return -1;
+    }
+
+    int vpts = 0, apts = 0;
+    const int LINE_LEN = 100;
+    char line_str[LINE_LEN] = {0};
+    int len = 0;
+    int ret = -1;
+    bool audio_finish = false;
+    bool video_finish = false;
+    while(true)
+    {
+        //write video
+        #if 1
+        if(!video_finish)
+        {
+            fgets(line_str, LINE_LEN, vsizein_file);
+            len = atoi(line_str);
+
+            // printf("get video data size: I(%d), key:%d, s->%s", len, bkey, line_str);
+            ret = fread(buf, 1, len, vinfile);
+            if(ret != len || len <= 0)
+            {
+                video_finish = true;
+                printf("read video src file finish\n");
+                if(audio_finish) break;
+            }
+
+            if(!video_finish && writer.WriteVideo(buf, len, vpts))
+            {
+                printf("wirte video frame error\n");
+                return 0;
+            }
+            vpts += 40;
+        }
+        #endif
+
+        if(!audio_finish)
+        {
+            fgets(line_str, LINE_LEN, asizein_file);
+            sscanf(line_str, "pkt_size=\"%d\"", &len);
+
+            // printf("get audio data size: %d, s->%s", len, line_str);
+            ret = fread(buf, 1, len, ainfile);
+            if(ret != len || len <= 0)
+            {
+                audio_finish = true;
+                printf("read audio src file finish\n");
+                if(video_finish) break;
+            }
+
+            if(!audio_finish && writer.WriteAudio(buf, len, apts))
+            {
+                printf("wirte audio frame error\n");
+                return 0;
+            }
+            apts += 64;
+        }
+    }
+
     return 0;
 }
 
@@ -237,6 +343,7 @@ int main(int argc, char **argv)
 
     const std::string option_264 = "264";
     const std::string option_265 = "265";
+    const std::string option_file = "file";
 
     if(!strncmp(argv[1], option_264.c_str(), option_264.length()))
     {
@@ -247,6 +354,11 @@ int main(int argc, char **argv)
     {
         printf("option:%s, test 265 mp4 package\n", argv[1]);
         test_h265();
+    }
+    else if(!strncmp(argv[1], option_file.c_str(), option_file.length()))
+    {
+        printf("option:%s, test file mp4 package\n", argv[1]);
+        test_file();
     }
 
     return 0;

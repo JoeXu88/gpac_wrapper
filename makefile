@@ -1,12 +1,13 @@
+GPAC_ROOT=../gpac
 MP4file=MP4Writer
 SERV_TARGET=./test
 SERV_OBJS=main.o MP4Writer.o MP4WriterInter.o
 CXX=g++
 GCC=gcc
 CXXFLAGS=-g -DGPAC_HAVE_CONFIG_H
-LIBS=-lz -lpthread ../../bin/gcc/libgpac_static.a
+LIBS=${GPAC_ROOT}/bin/gcc/libgpac_static.a -lz -lpthread
 
-INCLUDES=-I ./ -I ../../include/ -I ../../
+INCLUDES=-I ./ -I ${GPAC_ROOT}/include/ -I ../../
 
 .PHONY:all
 

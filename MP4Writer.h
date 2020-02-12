@@ -94,13 +94,13 @@ private:
 
 	GF_ISOFile *m_pFile;
 
-	int m_VnTrackID; //video new track id
-	int m_AnTrackID; //audio new track id
-	unsigned int m_VnStreamIndex;
-	unsigned int m_AnStreamIndex;
+	int32_t m_VnTrackID; //video new track id
+	int32_t m_AnTrackID; //audio new track id
+	uint32_t m_VnStreamIndex;
+	uint32_t m_AnStreamIndex;
 	
-	unsigned char *m_pNaluData[AF_NALU_MAX];
-	int m_pNaluLength[AF_NALU_MAX];
+	uint8_t *m_pNaluData[AF_NALU_MAX];
+	int32_t m_pNaluLength[AF_NALU_MAX];
 };
 
 

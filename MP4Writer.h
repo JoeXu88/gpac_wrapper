@@ -87,7 +87,9 @@ private:
 	ParamAudio m_aParam;
 	
 	uint64_t m_VTimeStamp;
+	uint64_t m_VLastTimeStamp;
 	uint64_t m_ATimeStamp;
+	uint64_t m_ALastTimeStamp;
 
 	bool m_VbReady;
 	bool m_AbReady;

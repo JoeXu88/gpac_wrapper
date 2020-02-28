@@ -1,4 +1,6 @@
 #include "MP4Writer.h"
+#include <fstream>
+#include <algorithm>
 
 const uint64_t DEFAULT_TIME_SCALE_V = 1000;
 
@@ -8,6 +10,18 @@ const static int g_HEVC_NaluMap[AF_NALU_MAX] = {
 	GF_HEVC_NALU_SEQ_PARAM,
 	GF_HEVC_NALU_PIC_PARAM
 };
+
+struct utils
+{
+	static inline uint64_t getPositiveOffset(uint64_t start, uint64_t end)
+	{
+		int64_t dts_offset = (int64_t)(end - start);
+		if(dts_offset < 0) dts_offset = -dts_offset;
+
+		return (uint64_t)dts_offset;
+	}
+};
+
 
 struct videoTrackHelper
 {
@@ -299,6 +313,8 @@ MP4Writer::MP4Writer()
 
 	m_VTimeStamp = -1;
 	m_ATimeStamp = -1;
+	m_ALastTimeStamp = -1;
+	m_VLastTimeStamp = -1;
 
 	m_VbReady = false;
 	m_AbReady = false;
@@ -893,6 +909,8 @@ int MP4Writer::WriteH265MetaData(unsigned char **ppNaluData, int *pNaluLength)
 
 int MP4Writer::WriteVFrame(unsigned char *pData, int nSize, bool bKey, uint64_t nTimeStamp)
 {		
+	nTimeStamp = (nTimeStamp == m_VLastTimeStamp)? (nTimeStamp+1):nTimeStamp; //make sure not same timestamp
+
 	if (m_VTimeStamp == -1 && bKey)
 	{
 		m_VTimeStamp = nTimeStamp;
@@ -904,7 +922,7 @@ int MP4Writer::WriteVFrame(unsigned char *pData, int nSize, bool bKey, uint64_t 
 		pISOSample->IsRAP = (SAPType)bKey;
 		pISOSample->dataLength = nSize;
 		pISOSample->data = (char *)pData;
-		pISOSample->DTS = nTimeStamp - m_VTimeStamp;
+		pISOSample->DTS = utils::getPositiveOffset(m_VTimeStamp, nTimeStamp);
 		pISOSample->CTS_Offset = 0; //ignore B frame here; FIXME: need to improve in future
 		GF_Err gferr = gf_isom_add_sample(m_pFile, m_VnTrackID, m_VnStreamIndex, pISOSample);			
 		if (gferr == -1)
@@ -919,6 +937,7 @@ int MP4Writer::WriteVFrame(unsigned char *pData, int nSize, bool bKey, uint64_t 
 		pISOSample->dataLength = 0;
 		gf_isom_sample_del(&pISOSample);
 		pISOSample = NULL;
+		m_VLastTimeStamp = nTimeStamp;
 	}
 	
 	return 0;
@@ -927,22 +946,24 @@ int MP4Writer::WriteVFrame(unsigned char *pData, int nSize, bool bKey, uint64_t 
 int MP4Writer::WriteAFrame(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 {
 	int res = 0;	
+	nTimeStamp = (nTimeStamp == m_ALastTimeStamp)? (nTimeStamp+1):nTimeStamp; //make sure not same timestamp
+
 	if (m_ATimeStamp == -1)
 	{
 		m_ATimeStamp = nTimeStamp;
 	}
 	
 	if (m_ATimeStamp != -1)
-	{	
+	{
 		GF_ISOSample *pISOSample = gf_isom_sample_new();
 		pISOSample->IsRAP = RAP;
 		pISOSample->dataLength = nSize;
 		pISOSample->data = (char *)pData;
-		pISOSample->DTS = nTimeStamp - m_ATimeStamp;
+		pISOSample->DTS = utils::getPositiveOffset(m_ATimeStamp, nTimeStamp);
 		pISOSample->CTS_Offset = 0;
 		// pISOSample->nb_pack = 0;
 		GF_Err gferr = gf_isom_add_sample(m_pFile, m_AnTrackID, m_AnStreamIndex, pISOSample);			
-		// printf("add sample[len:%d, dts:%ld] ret: %d\n", pISOSample->dataLength, pISOSample->DTS, gferr);
+		// printf("add sample[len:%d, dts:%lld] ret: %d\n", pISOSample->dataLength, pISOSample->DTS, gferr);
 		if (gferr == -1)
 		{
 			res = -1;
@@ -953,6 +974,7 @@ int MP4Writer::WriteAFrame(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 		pISOSample->dataLength = 0;
 		gf_isom_sample_del(&pISOSample);
 		pISOSample = NULL;
+		m_ALastTimeStamp = nTimeStamp;
 	}
 	
 	return res;

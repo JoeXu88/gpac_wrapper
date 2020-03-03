@@ -1,6 +1,8 @@
 #ifndef __MP4_WRITER_H__
 #define __MP4_WRITER_H__
 
+#include <vector>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -14,15 +16,29 @@ extern "C" {
 typedef enum _MP4_VIDEO_ENC_TYPE
 {
 	AF_MP4_ENC_NONE = 0,
-	//video use low 4bits 0x0f, xtype | AF_MP4_WITH_VIDEO
+	//video use low 4bits 0x0f
 	AF_MP4_WITH_VIDEO = 0x01,
-	AF_MP4_VIDEO_H264 = 0x03,
-	AF_MP4_VIDEO_H265 = 0x05,
+	AF_MP4_VIDEO_H264 = 0x02,
+	AF_MP4_VIDEO_H265 = 0x04,
 
-	//audio use high 4bits 0xf0, xtype | AF_MP4_WITH_AUDIO
-	AF_MP4_WITH_AUDIO = 0x80,
-	AF_MP4_AUDIO_AAC = 0x90,
+	//audio use high 4bits 0xf0
+	AF_MP4_WITH_AUDIO = 0x10,
+	AF_MP4_AUDIO_AAC = 0x20,
 }MP4_ENC_TYPE;
+
+typedef enum
+{
+	TRACK_NONE = 0,
+	TRACK_AUDIO = 1,
+	TRACK_VIDEO = 2
+}Media_track_type;
+
+typedef struct
+{
+	Media_track_type track_type;
+	MP4_ENC_TYPE enc_type;
+}Media_track;
+
 
 typedef enum tag_AF_NALU_TYPE
 {
@@ -77,8 +93,11 @@ private:
 	int NewVideoTrack();
 	int NewAudioTrack();
 
+	inline void insertMediaTrack(MP4_ENC_TYPE enc_type, Media_track_type track_type);
+	inline Media_track* getMediaTrack(Media_track_type track_type);
+
 private:
-	int ConfigAudioTrack();
+	int ConfigAudioTrack(MP4_ENC_TYPE type);
 	int ConfigAAC();
 
 private:
@@ -103,6 +122,8 @@ private:
 	
 	uint8_t *m_pNaluData[AF_NALU_MAX];
 	int32_t m_pNaluLength[AF_NALU_MAX];
+
+	std::vector<Media_track> m_media_tracks;
 };
 
 

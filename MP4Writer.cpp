@@ -346,7 +346,7 @@ int MP4Writer::Create(char *strName)
 	m_pFile = gf_isom_open(strName, GF_ISOM_OPEN_WRITE, NULL);
 	if (m_pFile == NULL)
 	{
-		return -1;
+		return -2;
 	}
 
 	gf_isom_set_brand_info(m_pFile, GF_ISOM_BRAND_MP42, 0);
@@ -358,21 +358,45 @@ int MP4Writer::Create(char *strName)
 	return 0;
 }
 
+void MP4Writer::insertMediaTrack(MP4_ENC_TYPE enc_type, Media_track_type track_type)
+{
+	Media_track new_track;
+	new_track.enc_type = enc_type;
+	new_track.track_type = track_type;
+	m_media_tracks.push_back(new_track);
+}
+
+Media_track* MP4Writer::getMediaTrack(Media_track_type track_type)
+{
+	int size = m_media_tracks.size();
+	for(int i=0; i<size; i++)
+	{
+		if(m_media_tracks[i].track_type == track_type)
+			return &m_media_tracks[i];
+	}
+
+	return NULL;
+}
+
 void MP4Writer::AddVideoTrack(MP4_ENC_TYPE nEncType, int nWidth, int nHeight, int nFps)
 {
-	m_enEncType = (MP4_ENC_TYPE)(m_enEncType|nEncType);
 	m_vParam.width = nWidth;
 	m_vParam.height = nHeight;
 	m_vParam.fps = nFps;
+
+	insertMediaTrack(nEncType, TRACK_VIDEO);
+	printf("add new video track with type: 0x%02x\n", nEncType);
 }
 
 void MP4Writer::AddAudioTrack(MP4_ENC_TYPE nEncType, int samplerate, int channel, int bit_depth, int profile)
 {
-	m_enEncType = (MP4_ENC_TYPE)(m_enEncType|nEncType);
 	m_aParam.samplerate = samplerate;
 	m_aParam.channel = channel;
 	m_aParam.bit_depth = bit_depth;
 	m_aParam.profile = profile;
+
+	insertMediaTrack(nEncType, TRACK_AUDIO);
+	printf("add new audio track with type: 0x%02x\n", nEncType);
 }
 
 int MP4Writer::Save()
@@ -412,21 +436,33 @@ int MP4Writer::WriteVideo(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 		return -1;
 	}
 
-	if (m_enEncType & AF_MP4_WITH_VIDEO)
+	if ((pData == NULL) || (nSize <= 0))
 	{
-		MP4_ENC_TYPE type = MP4_ENC_TYPE(m_enEncType & 0x0f);
-		if (type == AF_MP4_VIDEO_H265)
-		{
-			return WriteH265(pData, nSize, nTimeStamp);
-		}
-		else if (type == AF_MP4_VIDEO_H264)
-		{
-			return WriteH264(pData, nSize, nTimeStamp);
-		}
+		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("null data got\n"));
+		return -1;
 	}
 
-	GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("no video track to write\n"));
-	return -1;
+	Media_track* video_track = getMediaTrack(TRACK_VIDEO);
+	if(video_track == NULL)
+	{
+		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("no video track added yet\n"));
+		return -2;
+	}
+
+	switch (video_track->enc_type)
+	{
+	case AF_MP4_VIDEO_H265:
+		return WriteH265(pData, nSize, nTimeStamp);
+	
+	case AF_MP4_VIDEO_H264:
+		return WriteH264(pData, nSize, nTimeStamp);
+	
+	default:
+		break;
+	}
+
+	GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("video track enctype[%02x] not support\n", video_track->enc_type));
+	return -3;
 }
 
 int MP4Writer::WriteAudio(unsigned char *pData, int nSize, uint64_t nTimeStamp)
@@ -437,29 +473,38 @@ int MP4Writer::WriteAudio(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 		return -1;
 	}
 
-	if (m_enEncType & AF_MP4_WITH_AUDIO)
-	{
-		MP4_ENC_TYPE type = MP4_ENC_TYPE(m_enEncType & 0xf0);
-		if (type == AF_MP4_AUDIO_AAC)
-		{
-			return WriteAAC(pData, nSize, nTimeStamp);
-		}
-	}
-
-	GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("no audio track to write\n"));
-	return -1;
-}
-int MP4Writer::WriteAAC(unsigned char *pData, int nSize, uint64_t nTimeStamp)
-{
 	if ((pData == NULL) || (nSize <= 0))
 	{
 		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("null data got\n"));
-		return -1;
+		return -2;
 	}
 
+	Media_track* audio_track = getMediaTrack(TRACK_AUDIO);
+	if(audio_track == NULL)
+	{
+		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("no audio track added yet\n"));
+		return -3;
+	}
+
+	switch (audio_track->enc_type)
+	{
+	case AF_MP4_AUDIO_AAC:
+		return WriteAAC(pData, nSize, nTimeStamp);
+	
+	default:
+		break;
+	}
+
+	GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("audio track enctype[%02x] not support\n", audio_track->enc_type));
+	return -4;
+}
+
+int MP4Writer::WriteAAC(unsigned char *pData, int nSize, uint64_t nTimeStamp)
+{
 	if (!m_AbReady)
 	{
-		if(NewAudioTrack()) return -1;
+		NewAudioTrack();
+		if(ConfigAudioTrack(AF_MP4_AUDIO_AAC)) return -5;
 		m_AbReady = true;
 	}
 
@@ -468,12 +513,6 @@ int MP4Writer::WriteAAC(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 
 int MP4Writer::WriteH264(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 {
-	if ((pData == NULL) || (nSize <= 0))
-	{
-		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("null data got\n"));
-		return -1;
-	}
-
 	int lenIn = nSize;
 	int lenOut = 0;
 	unsigned char *pIn = pData;
@@ -566,12 +605,6 @@ int MP4Writer::WriteH264(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 
 int MP4Writer::WriteH265(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 {
-	if ((pData == NULL) || (nSize <= 0))
-	{
-		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("null data got\n"));
-		return -1;
-	}
-
 	int lenIn = nSize;
 	int lenOut = 0;
 	unsigned char *pIn = pData;
@@ -713,12 +746,11 @@ int MP4Writer::NewAudioTrack()
 	m_AnTrackID = gf_isom_new_track(m_pFile, 0, GF_ISOM_MEDIA_AUDIO, DEFAULT_TIME_SCALE_V);
 	gf_isom_set_track_enabled(m_pFile, m_AnTrackID, 1);
 
-	return  ConfigAudioTrack();
+	return  0;
 }
 
-int MP4Writer::ConfigAudioTrack()
+int MP4Writer::ConfigAudioTrack(MP4_ENC_TYPE type)
 {
-	MP4_ENC_TYPE type = MP4_ENC_TYPE(m_enEncType & 0xf0);
 	switch (type)
 	{
 	case AF_MP4_AUDIO_AAC:
@@ -726,7 +758,7 @@ int MP4Writer::ConfigAudioTrack()
 	
 	default:
 		GF_LOG(GF_LOG_ERROR, GF_LOG_CONTAINER, ("error audio track type\n"));
-		return -1;
+		return -7;
 	}
 }
 
@@ -966,7 +998,7 @@ int MP4Writer::WriteAFrame(unsigned char *pData, int nSize, uint64_t nTimeStamp)
 		// printf("add sample[len:%d, dts:%lld] ret: %d\n", pISOSample->dataLength, pISOSample->DTS, gferr);
 		if (gferr == -1)
 		{
-			res = -1;
+			res = -20;
 		}
 		// printf("dts: %lld, cts offset: %d\n", pISOSample->DTS, pISOSample->CTS_Offset);
 

@@ -424,6 +424,8 @@ int MP4Writer::Save()
 
 	memset(&m_vParam, 0, sizeof(m_vParam));
 	memset(&m_aParam, 0, sizeof(m_aParam));
+
+	m_media_tracks.clear();
 	
 	return 0;
 }
